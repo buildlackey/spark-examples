@@ -5,6 +5,8 @@ import java.io.File
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.SparkSession
 
+import scala.io.{BufferedSource, Source}
+
 object SparkContextControlBasicConfigurationSettings extends App {
 
   val conf = new SparkConf().setAppName("blah").setMaster("local").set("spark.sql.shuffle.partitions", "4")
@@ -41,10 +43,22 @@ object SparkContextControlBasicConfigurationSettings extends App {
   "rm -rf /tmp/outfoo1".!
   jdf.write.option("delimiter", "*").csv("/tmp/outfoo1")
 
-    // you will see 2 partitions created --  this will vary as
+  val lsOutput = "ls /tmp/outfoo1".!!
+  System.out.println("lsOutput:\n" + lsOutput);
+
+  
+  new File("/tmp/outfoo1").listFiles().filter(_.getAbsolutePath.endsWith("csv")).
+    foreach{ file =>
+      Source.fromFile(file).getLines().foreach(println)
+    }
+
+
+
+
 
  // read back in using format / load  (per exam objectives)
   val  jj = spark.read.format("csv").option("delimiter", "*").load("/tmp/outfoo1")
+  println("dumping rows from dataframe resulting from reading back csv output")
   jj.show()
 
   // Verify that output directory contains 4 files of the form part-00002-d4dc6a09-.....csv
