@@ -61,10 +61,13 @@ object PartitioningDataFrameViaUnderlyingRDD extends App {
   assert(cpEmpRdd.partitioner.get == dumbPartitioner)
   assert(cpDeptRdd.partitioner.get == dumbPartitioner)
 
-  // Here we join using RDDs and ensure that the resultant rdd is the partitioned so most things end up in partition 1
+  // Here we join using RDDs and ensure that the resultant rdd is partitioned so most things end up in partition 1
   val joined: RDD[(String, (Emp, Dept))] = cpEmpRdd.join(cpDeptRdd)
-  val reso: Array[(Array[(String, (Emp, Dept))], Int)] = joined.glom().collect().zipWithIndex
-  reso.foreach((item: Tuple2[Array[(String, (Emp, Dept))], Int]) => println(s"array size: ${item._2}. contents: ${item._1.toList}"))
+  val result: Array[(Array[(String, (Emp, Dept))], Int)] = joined.glom().collect().zipWithIndex
+  result.foreach{
+    item: Tuple2[Array[(String, (Emp, Dept))], Int] =>
+      println(s"partition: ${item._2}. contents: ${item._1.toList}")
+  }
 
   System.out.println("partitioner of RDD created by joining 2 RDD's w/ custom partitioner: " + joined.partitioner)
   assert(joined.partitioner.contains(dumbPartitioner))
