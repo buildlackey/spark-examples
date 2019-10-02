@@ -6,20 +6,6 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.IntegerType
 
 
-object More {
-  IntegerType
-
-  case class Item(name: String, id: Int, price: Int)
-
-  object ItemOrderingByPrice extends Ordering[Item] {
-    def compare(a: Item, b: Item): Int = a.price compare b.price
-  }
-
-  object ItemOrderingByPriceAndId extends Ordering[Item] {
-    def compare(a: Item, b: Item): Int = a.price compare b.price
-  }
-
-}
 
 
 object DateFun extends App {
@@ -82,12 +68,6 @@ object DateFun extends App {
     val t1 = time1
     val t2 = time2
     val tdf1 = List((t1, t2)).toDF("timestamp1", "timestamp2")
-    val tdf2 = tdf1.
-      withColumn("h1", hour(to_timestamp($"timestamp1", fmt))).
-      withColumn("h2", hour(to_timestamp($"timestamp2", fmt))).
-      select($"h2" - $"h1")
-    assert(tdf2.first.getAs[Int](0) == 1)
-
 
     val tdf3 = tdf1.
       withColumn("h1", hour(unix_timestamp($"timestamp1", fmt).cast(TimestampType))).
@@ -110,7 +90,7 @@ object DateFun extends App {
 
   // Make sure we can sort dates in proper order, which is not alphabetically !  And handle nulls so they are last !
   //
-  val datesAndEventNames = List( // List of dates one day before the birth day... weird
+  val datesAndEventNames = List( // List of dates one day before the birth day of each person. convert to real b-day !
     ("07-22-2008", "moe"),
     ("cant-parse-2008", "null"),
     ("01-22-2009", "last"),
@@ -120,7 +100,10 @@ object DateFun extends App {
 
   val bdaysDF = datesAndEventNames.
     withColumn("parsedDate", to_date($"date", "MM-dd-yyyy")).
-    select(date_add($"parsedDate", 1).as("dateOfBirth"), $"name").orderBy($"dateOfBirth".asc_nulls_last)
+    select(
+      date_add($"parsedDate", 1).   // add 1 to convert to actual birthday
+        as("dateOfBirth"), $"name").
+    orderBy($"dateOfBirth".asc_nulls_last)
   bdaysDF.show()
   // RESULT
   //+-----------+-----+
@@ -179,7 +162,7 @@ object JoinFun extends App {
 
   val joinedDf = numbersDf.join(lettersDf, numbersDf.col("numbers") <=> lettersDf.col("numbers"))
   joinedDf.show()
-  // RESULT ONE:https://accounts.skilljar.com/accounts/profile/2https://accounts.skilljar.com/accounts/profile/2cwlyak7xxf5h?next=%2Fhdp-certified-spark-developer-hdpcsd2019-exam%2F273937&d=2cwlyak7xxf5hcwlyak7xxf5h?next=%2Fhdp-certified-spark-developer-hdpcsd2019-exam%2F273937&d=2cwlyak7xxf5h
+  // RESULT
   //+-------+-------+-------+
   //|numbers|numbers|letters|
   //+-------+-------+-------+
@@ -196,7 +179,7 @@ object JoinFun extends App {
         lettersDf,
         numbersDf.col("numbers") <=> lettersDf.col("numbers")).drop(lettersDf.col("numbers"))
   j2.show()
-  // RESULT: same as RESULT ONE, above, but without dups
+  // RESULT: same as RESULT ONE, above, but without numbers column appearing twice in output
 
   // For equi-joins there exist a special shortcut syntax which takes either a sequence of strings or single string
   // But this syntax will not allow you to include the null columnn matches in the join results
@@ -220,7 +203,12 @@ object JoinFun extends App {
     (null, "zzz", 42),
     ("", "hhh", 44)
   ).toDF("numbers", "letters", "dup")
-  val j5 = numbersDf2.alias("n").join(lettersDf2.alias("l"), Seq("numbers")).select($"n.numbers", $"letters", $"l.dup")
+  val j5 =
+    numbersDf2.alias("n").
+      join(
+        lettersDf2.alias("l"),
+        Seq("numbers")).
+      select($"n.numbers", $"letters", $"l.dup")
   j5.show()
   //RESULT:
   //+-------+-------+---+
@@ -243,8 +231,6 @@ object JoinFun extends App {
   //|    456|    def|  4|
   //|       |    hhh| 44|
   //+-------+-------+---+
-
-
 }
 
 object WriteTableAndVerifyItExistsInHive extends App {
@@ -274,28 +260,6 @@ object WriteTableAndVerifyItExistsInHive extends App {
     */
   // write the frame
   frame.write.mode("overwrite").saveAsTable("t4")
-
-  // JUNK
-
-  // Next example converts a string specifying the locale independent date of the start of the unix epoch (1970-01-01)
-  // to a time stamp equivalent to whatever GMT time was at midnight IN LOCAL TIME ZONE of that (start of epoch) date.
-  //
-  val dateString = "1970-01-01" // locale independent date of of the start of the unix epoch
-  val dateString2 = "1970-01-012" // locale independent date of of the start of the unix epoch
-  val df2 = Seq((dateString, dateString2)).toDF("date", "date2")
-  val df3 = df2.withColumn("date1", to_date(unix_timestamp($"date", "yyyy-MM-dd").cast("timestamp")))
-
-  val first = df3.select(month($"date1")).first()
-
-  {
-    val dateString = "1970-01-01" // locale independent date of of the start of the unix epoch
-  val dateString2 = "1970-01-012" // locale independent date of of the start of the unix epoch
-  val df2 = Seq((dateString, dateString2)).toDF("date", "date2")
-    val df3 = df2.withColumn("date1", to_date($"date", "yyyy-MM-dd"))
-
-    val first = df3.select(month($"date1")).first()
-
-  }
 
 
 }
