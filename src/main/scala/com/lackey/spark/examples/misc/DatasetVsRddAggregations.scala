@@ -67,6 +67,23 @@ object DatasetAggs extends App {
     orders.as('a).join(orderItems.as('b), $"a.orderId" === $"b.orderId")
 
 
+
+  // REDUNDANT ... delete !
+  println("total revenue per day AGAIN")
+  val orderWithItems =
+    orders.join(orderItems, "orderId")
+
+  val revPerDay =
+    orderWithItems.
+      withColumn("revForOrderItem" ,$"orderQuantity" * $"itemPrice").
+      withColumn("date" , to_date($"date", "MM/dd/yyyy")).
+      groupBy($"date").
+      agg(sum($"revForOrderItem")).
+      orderBy($"date")
+
+  revPerDay.show(false)
+
+
   println("total orders by day")
   ordersWithItems
     .groupBy("date").agg(sum($"b.orderQuantity" * $"b.itemPrice"))
@@ -80,7 +97,9 @@ object DatasetAggs extends App {
   println("total revenue per day ")
   ordersWithItems
     .groupBy("date")
-    .agg(sum($"b.orderQuantity" * $"b.itemPrice").as("revenue"), countDistinct($"b.orderId").as("numOrders"))
+    .agg(
+      sum($"b.orderQuantity" * $"b.itemPrice").as("revenue"),
+      countDistinct($"b.orderId").as("numOrders"))
     .withColumn("avgPerOrder", $"revenue" / $"numOrders")
     .show()
 
@@ -277,110 +296,12 @@ object RddAggsMoreEfficientThanGroupBy extends App {
       println(s"for day $day:  count=$count.    total=$total.  avg=${total / count}.")
   }
 
-
-  val totRevByOrder = itemsByOrder.aggregateByKey(0)({ case (accum: Int, line) => accum + line.totForItem }, (accum1, accum2) => accum1 + accum2)
+  val totRevByOrder = itemsByOrder.
+    aggregateByKey(0)(
+      { case (accum: Int, line) => accum + line.totForItem },
+      (accum1, accum2) => accum1 + accum2
+    )
   System.out.println("totRevByOrder:");
   totRevByOrder.foreach(println)
-
-
-  //(0) { (a,b) => 0 }
-
-
-  //(line1,line2) => line1.totForItem + line2.totForItem)
-
-
-  // Calculate total and average revenue for each date. -
-  //
-
-
-  //System.out.println("res:" + res);
-  //System.out.println("res:" + res.toList);
-
-
-  /*
-
-
-  Line(0,tim,1/2/2011,40),
-  Line(0,tim,1/2/2011,30),
-  Line(1,tim,1/2/2011,40),
-  Line(3,tim,2/2/2011,10),
-  Line(2,bob,1/2/2011,100),
-  Line(2,bob,1/2/2011,30))
-
-  val rawData = Seq(
-    "Christopher|Jan 11, 2015|5 -",
-    "Kapil|11 Jan, 2015|5 -",
-    "Thomas|6-17-2014|5 -",
-    "John|22-08-2013|5 -",
-    "Mithun|2013|5 -",
-    "Jitendra||5 -"
-  )
-
-  val dfLine: Dataset[String] = rawData.toDF().as[String]
-  val dfWithDate: Dataset[(String, String)] =
-    dfLine
-      .map(line => line.replace("\t", " "))
-      .map(line => (line.split("\\|")(1), line))
-
-
-  val extracted: Dataset[Map[String, String]] = dfWithDate.map { case(date, wholeLine) =>
-
-    val months = "(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)"
-    val mdy = s"$months\\s+(\\d{1,2}),\\s+(\\d{4})".r
-    val dmy = s"(\\d{1,2})\\s+$months,\\s+(\\d{4})".r
-    //val separator = "(-\\|/)"
-    val numdate =  s"(\\d{1,2})-(\\d{1,2})-(\\d{4})".r
-    val numdate2 = s"(\\d{1,2})/(\\d{1,2})/(\\d{4})".r
-
-    val parts:Option[(String,String,String)]  = date.trim() match {
-      case mdy(m,d, y) => Some((m,d, y))
-      case dmy(m,d, y) => Some((m,d, y))
-      case numdate(m,d, y) => Some((m,d, y))
-      case numdate2(m,d, y) => Some((m,d, y))
-      case _ => None
-    }
-
-    if (parts.isEmpty) {
-      Map[String,String]("line" -> wholeLine, "month" -> null, "day" -> null, "year" -> null)
-    } else {
-      val Some((m,d,y)) = parts
-      Map[String,String]("line" -> wholeLine, "month" -> m, "day" -> d, "year" -> y)
-    }
-  }
-
-  extracted.show(truncate = false)
-
-  val badDates: Dataset[Map[String, String]] = extracted.filter{ map: Map[String, String] =>
-    println(s"value of map is $map")
-    StringUtils.isEmpty(map("month"))
-  }.coalesce(1)
-
-  val goodDates = extracted.filter(map => StringUtils.isNotEmpty(map("month"))).coalesce(1)
-
-  badDates.write.json("/tmp/bad1")
-  goodDates.write.json("/tmp/good1")
-
-
-    val ords = List(
-      (0, "1/2/2011", "tim", "pending"),
-      (1, "1/2/2011", "tim", "pending"),
-      (2, "1/2/2011", "bob", "pending"),
-      (3, "2/2/2011", "tim", "pending")
-    )
-
-  val items =  List(
-      (0, 1, "beer", 2, 20),
-      (0, 2, "nuts", 3, 10),
-      (1, 1, "tacos", 1, 40),
-      (2, 1, "nuts", 10, 10),
-      (2, 2, "tacos", 1, 30),
-      (3, 1, "nuts", 1, 10)
-    )
-
-
-
-   */
-
-
 }
 

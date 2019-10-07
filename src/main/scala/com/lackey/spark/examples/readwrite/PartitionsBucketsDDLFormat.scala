@@ -5,8 +5,50 @@ import java.io.File
 import org.apache.spark.sql.{Dataset, Row, SparkSession}
 
 
+// This test creates a large-ish number of rows so that we are sure that our items hash into all the buckets available.
+// As expected from the test name we verify that the number of parquet files created by the script ==  num buckets X num partitions
+// Note that if we only created a handful of records we found we did not get the expected number of files written out.
+// I suspect that is because in the smallish set some of the records might have hashed to the same bucket.
+//
+object VerifyNumberOfFilesCreatedIsNumBucketsTimesNumPartitions extends App {
+  val sparkSession =
+    SparkSession.builder().
+      appName("simple").
+      master("local[3]").getOrCreate()
+
+  sparkSession.sparkContext.setLogLevel("ERROR")
+  val spark = sparkSession
+
+  import spark.implicits._
+
+  import scala.sys.process._
+  "rm -rf spark-warehouse/ratboy".!
+
+  spark.sql("drop table if exists ratboy").show()
+
+  case class Person(first: String, last: String, age: Integer)
+
+  val df = ( 1 to 1000).map(i => Person(s"moe_$i", "last", i)).toDF()
+
+  val numBuckets = 5
+  val numPartitions = df.rdd.getNumPartitions
+  val numParquetFilesExpected =  numBuckets *  numPartitions
+  df.write.option("mode", "overwrite").bucketBy(numBuckets, "first").saveAsTable("ratboy")
+
+  assert(
+    new File("spark-warehouse/ratboy").
+      listFiles().count(f => f.getName.endsWith("parquet")) == numParquetFilesExpected )
+}
+
+
 object PartitionsBucketsDDLFormat extends App {
-  val sparkSession = SparkSession.builder().appName("simple").master("local[2]").getOrCreate()
+  val sparkSession =
+    SparkSession.builder().
+      appName("simple").
+      enableHiveSupport().
+      master("local[3]").getOrCreate()
+
+
   sparkSession.sparkContext.setLogLevel("ERROR")
   val spark = sparkSession
 
@@ -33,17 +75,16 @@ object PartitionsBucketsDDLFormat extends App {
   assert(new File("/tmp/output.mouse").listFiles().count(f => f.getName.startsWith("first=")) == 4)
 
 
-
-
-  // Bucketing demo
+  // Bucketing test - this doesn't verify the actual number of buckets created. See the above test for that !
   //
-  spark.sql("drop table if exists cogbox").show()
+  spark.sql("drop table if exists fogbox").show()
+  println("show tables / current working dir: " + System.getProperty("user.dir"))
   spark.sql("show tables").show()     // this shows the table is gone, but... seems to linger when run from IDE
 
-  // So,  we need to delete the cogbox directory. If we don't we can't recreate the table. This doesn't happen in
+  // So,  we need to delete the fogbox directory. If we don't we can't recreate the table. This doesn't happen in
   // spark shell.. not sure why ...  punting for now
   import scala.sys.process._
-  "rm -rf spark-warehouse/cogbox".!
+  "rm -rf spark-warehouse/fogbox".!
 
   import org.apache.spark.sql.Row
   case class Parson(first: String, last: String, age: Integer)
@@ -55,23 +96,26 @@ object PartitionsBucketsDDLFormat extends App {
 
   // BAD:
   // for me, this gives: AnalysisException: 'save' does not support bucketBy right now
-  // pdf.write.option("mode","overwrite").bucketBy(3, "last", "age").parquet("/tmp/rrcogbox")
+  // pdf.write.option("mode","overwrite").bucketBy(3, "last", "age").parquet("/tmp/rrfogbox")
 
-  // This works
-  pdf.write.option("mode", "overwrite").bucketBy(2, "first").saveAsTable("cogbox")
+  println(s"number of partitions of rdd will affect # of buckets written: ${pdf.rdd.getNumPartitions}")
 
-  val d2 = spark.sql("select * from cogbox")
+
+  pdf.write.option("mode", "overwrite").bucketBy(2, "first").saveAsTable("fogbox")
+
+  val d2 = spark.sql("select * from fogbox")
   val first: Row = d2.orderBy($"first").first
   System.out.println("first:" + first);
   assert(first == Row("bob", "y", 2))
+  println("select * from fogbox")
   d2.show()
-  assert(spark.sql("select distinct first from cogbox").collect().toList.size == 4)
+  assert(spark.sql("select distinct first from fogbox").collect().toList.size == 4)
 
   val pdf3 = List(Parson("axel", "x", 9)).toDF()
-  pdf3.write.insertInto("cogbox")
-  spark.sql("select distinct first from cogbox").show()
+  pdf3.write.insertInto("fogbox")
+  spark.sql("select distinct first from fogbox").show()
 
-  assert(spark.sql("select distinct first from cogbox").collect().toList.size == 5)  // one more than before
+  assert(spark.sql("select distinct first from fogbox").collect().toList.size == 5)  // one more than before
 
 
 
@@ -86,13 +130,13 @@ object PartitionsBucketsDDLFormat extends App {
   // The statement below won't work, 'cause you need a schema when dealing with rows
   // spark.createDataFrame( rdd)
 
-  val sc = StructType.fromDDL("name STRING, rank INT")
-  val frame = spark.createDataFrame(rdd, sc).select($"rank" + 1)
+  val schema = StructType.fromDDL("name STRING, rank INT")
+  val frame = spark.createDataFrame(rdd, schema).select($"rank" + 1)
   frame.show()
   assert(frame.collect().toList.head.getAs[Integer](0) == 10)
 
   val sc2 = StructType(List(StructField("name", StringType), StructField("rank", IntegerType)))
-  assert(sc2 == sc)
+  assert(sc2 == schema)
 
 
   // RDD's of product are directly convertible to datasets
